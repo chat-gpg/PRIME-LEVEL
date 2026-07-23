@@ -356,6 +356,7 @@ const emptyForm = (type) => ({
 
 // ============================================================================
 /// ============================================================================
+// ============================================================================
 // PARTIE 5 : COMPOSANT PRINCIPAL (APP)
 // ============================================================================
 
@@ -373,7 +374,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // --- FONCTIONS DE CONNEXION / DÉCONNEXION À AJOUTER ICI ---
+  // Auth Firebase
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
@@ -392,22 +393,21 @@ export default function App() {
       setError("Erreur lors de la déconnexion");
     }
   };
-  // -----------------------------------------------------------
 
-  // Écoute de l'état de connexion utilisateur et chargement Firestore
+  // Écoute de l'état de connexion utilisateur et synchronisation Firestore
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       
       if (currentUser) {
-        // 1. Écouter les séances de l'utilisateur dans Firestore
+        // Écouter les séances de l'utilisateur dans Firestore
         const sessionsRef = collection(db, "users", currentUser.uid, "sessions");
         const unsubSessions = onSnapshot(sessionsRef, (snapshot) => {
           const docs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
           setSessions(docs.sort((a, b) => (a.date < b.date ? 1 : -1)));
         });
 
-        // 2. Écouter le profil de force de l'utilisateur
+        // Écouter le profil de force
         const profileRef = doc(db, "users", currentUser.uid, "profile", "force");
         const unsubProfile = onSnapshot(profileRef, (docSnap) => {
           if (docSnap.exists()) setProfile(docSnap.data());
@@ -418,7 +418,7 @@ export default function App() {
           unsubProfile();
         };
       } else {
-        // Si déconnecté, fallback sur le localStorage
+        // Mode hors-connexion / Fallback LocalStorage
         try {
           const savedSessions = localStorage.getItem("sessions");
           if (savedSessions) setSessions(JSON.parse(savedSessions));
@@ -435,6 +435,44 @@ export default function App() {
     setLoaded(true);
     return () => unsubscribe();
   }, []);
+
+  // Sauvegarder les séances (Local + Firestore)
+  const persist = async (next) => {
+    setSessions(next);
+    try {
+      localStorage.setItem("sessions", JSON.stringify(next));
+      setError("");
+    } catch (e) { setError("Erreur de sauvegarde locale."); }
+
+    if (user) {
+      try {
+        for (const session of next) {
+          const docRef = doc(db, "users", user.uid, "sessions", session.id.toString());
+          await setDoc(docRef, session, { merge: true });
+        }
+      } catch (e) {
+        console.error("Erreur de sauvegarde Firestore:", e);
+      }
+    }
+  };
+
+  // Sauvegarder le profil de force (Local + Firestore)
+  const persistProfile = async (next) => {
+    setProfile(next);
+    try {
+      localStorage.setItem("profile", JSON.stringify(next));
+    } catch (e) { setError("Erreur de sauvegarde du profil."); }
+
+    if (user) {
+      try {
+        const profileRef = doc(db, "users", user.uid, "profile", "force");
+        await setDoc(profileRef, next, { merge: true });
+      } catch (e) {
+        console.error("Erreur de sauvegarde du profil Firestore:", e);
+      }
+    }
+  };
+
   // Gestion du fichier GPX
   const handleFileSelected = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -464,7 +502,7 @@ export default function App() {
 
   const removeSession = (id) => persist(sessions.filter((s) => s.id !== id));
 
-  // Calculs hebdomadaires
+  // Calculs hebdomadaires & Rangs
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 86400000);
   const thisWeek = sessions.filter((s) => new Date(s.date) >= weekAgo);
@@ -485,7 +523,7 @@ export default function App() {
   };
   const ranks = useMemo(() => computeRanks(sessions, numProfile), [sessions, profile]);
 
- return (
+  return (
     <div className="min-h-screen bg-[#090B11] text-[#EAEDF5] pb-28 font-sans">
       
       {/* Header */}
@@ -538,6 +576,7 @@ export default function App() {
             )}
           </div>
         </div>
+
         {/* Bouton d'import GPX */}
         <button
           onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -555,7 +594,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Le reste de ton application (Vues, Modals, Navigation) continue en dessous... */}
+      {/* Contenu principal */}
       {!loaded ? (
         <div className="px-5 py-10 text-[#5A6072] font-mono text-sm">Chargement…</div>
       ) : (
