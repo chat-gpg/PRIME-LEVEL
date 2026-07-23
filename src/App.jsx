@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { 
   Plus, X, Zap, Dumbbell, Activity, LayoutGrid, Trash2, 
   Clock, Gauge, HeartPulse, ChevronRight, Upload, Settings, 
-  TrendingUp, Lock 
+  TrendingUp, Lock, User, LogOut, LogIn 
 } from "lucide-react";
 import { auth, db } from './firebase';
 import { 
@@ -17,7 +17,6 @@ import {
   setDoc, 
   onSnapshot 
 } from "firebase/firestore";
-import { User, LogOut, LogIn } from "lucide-react"; // On ajoute aussi ces icônes
 // ============================================================================
 // PARTIE 1 : CONFIGURATION ET CONSTANTES GLOBALES
 // ============================================================================
