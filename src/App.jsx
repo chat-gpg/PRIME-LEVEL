@@ -355,6 +355,7 @@ const emptyForm = (type) => ({
 });
 
 // ============================================================================
+/// ============================================================================
 // PARTIE 5 : COMPOSANT PRINCIPAL (APP)
 // ============================================================================
 
@@ -372,7 +373,28 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-// Écoute de l'état de connexion utilisateur et chargement Firestore
+  // --- FONCTIONS DE CONNEXION / DÉCONNEXION À AJOUTER ICI ---
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      setUserMenuOpen(false);
+    } catch (err) {
+      setError("Erreur lors de la connexion Google");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUserMenuOpen(false);
+    } catch (err) {
+      setError("Erreur lors de la déconnexion");
+    }
+  };
+  // -----------------------------------------------------------
+
+  // Écoute de l'état de connexion utilisateur et chargement Firestore
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -413,24 +435,6 @@ export default function App() {
     setLoaded(true);
     return () => unsubscribe();
   }, []);
-
-  // Sauvegarder les séances
-  const persist = (next) => {
-    setSessions(next);
-    try {
-      localStorage.setItem("sessions", JSON.stringify(next));
-      setError("");
-    } catch (e) { setError("Erreur de sauvegarde."); }
-  };
-
-  // Sauvegarder le profil de force
-  const persistProfile = (next) => {
-    setProfile(next);
-    try {
-      localStorage.setItem("profile", JSON.stringify(next));
-    } catch (e) { setError("Erreur de sauvegarde du profil."); }
-  };
-
   // Gestion du fichier GPX
   const handleFileSelected = async (e) => {
     const file = e.target.files && e.target.files[0];
