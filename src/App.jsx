@@ -4,7 +4,20 @@ import {
   Clock, Gauge, HeartPulse, ChevronRight, Upload, Settings, 
   TrendingUp, Lock 
 } from "lucide-react";
-
+import { auth, db } from './firebase';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  onSnapshot 
+} from "firebase/firestore";
+import { User, LogOut, LogIn } from "lucide-react"; // On ajoute aussi ces icônes
 // ============================================================================
 // PARTIE 1 : CONFIGURATION ET CONSTANTES GLOBALES
 // ============================================================================
@@ -357,20 +370,49 @@ export default function App() {
   const [error, setError] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const fileInputRef = useRef(null);
+  const [user, setUser] = useState(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // Charger les données sauvegardées au démarrage (localStorage)
+// Écoute de l'état de connexion utilisateur et chargement Firestore
   useEffect(() => {
-    try {
-      const savedSessions = localStorage.getItem("sessions");
-      if (savedSessions) setSessions(JSON.parse(savedSessions));
-    } catch (e) { setSessions([]); }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      
+      if (currentUser) {
+        // 1. Écouter les séances de l'utilisateur dans Firestore
+        const sessionsRef = collection(db, "users", currentUser.uid, "sessions");
+        const unsubSessions = onSnapshot(sessionsRef, (snapshot) => {
+          const docs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          setSessions(docs.sort((a, b) => (a.date < b.date ? 1 : -1)));
+        });
 
-    try {
-      const savedProfile = localStorage.getItem("profile");
-      if (savedProfile) setProfile(JSON.parse(savedProfile));
-    } catch (e) { /* Pas de profil pour l'instant */ }
+        // 2. Écouter le profil de force de l'utilisateur
+        const profileRef = doc(db, "users", currentUser.uid, "profile", "force");
+        const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+          if (docSnap.exists()) setProfile(docSnap.data());
+        });
+
+        return () => {
+          unsubSessions();
+          unsubProfile();
+        };
+      } else {
+        // Si déconnecté, fallback sur le localStorage
+        try {
+          const savedSessions = localStorage.getItem("sessions");
+          if (savedSessions) setSessions(JSON.parse(savedSessions));
+          else setSessions([]);
+        } catch (e) { setSessions([]); }
+
+        try {
+          const savedProfile = localStorage.getItem("profile");
+          if (savedProfile) setProfile(JSON.parse(savedProfile));
+        } catch (e) {}
+      }
+    });
 
     setLoaded(true);
+    return () => unsubscribe();
   }, []);
 
   // Sauvegarder les séances
@@ -440,35 +482,77 @@ export default function App() {
   };
   const ranks = useMemo(() => computeRanks(sessions, numProfile), [sessions, profile]);
 
-  return (
+ return (
     <div className="min-h-screen bg-[#090B11] text-[#EAEDF5] pb-28 font-sans">
       
       {/* Header */}
-<div className="px-5 pt-7 pb-4 sticky top-0 bg-[#090B11]/95 backdrop-blur z-10 border-b border-[#1B202C]">
-  <div className="relative flex items-center justify-center">
-    <h1 className="font-orbitron font-extrabold text-2xl uppercase tracking-widest text-center text-[#EAEDF5]">
-      PRIME LEVEL
-    </h1>
-    <span className="absolute right-0 font-mono text-xs text-[#5A6072]">
-      {now.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
-    </span>
-  </div>
+      <div className="px-5 pt-7 pb-4 sticky top-0 bg-[#090B11]/95 backdrop-blur z-10 border-b border-[#1B202C]">
+        <div className="relative flex items-center justify-between">
+          
+          {/* Titre */}
+          <h1 className="font-orbitron font-extrabold text-xl uppercase tracking-widest text-[#EAEDF5]">
+            PRIME LEVEL
+          </h1>
 
-  <button
-    onClick={() => fileInputRef.current && fileInputRef.current.click()}
-    className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border border-dashed transition-colors hover:border-[#33F7FF]/50"
-    style={{ borderColor: "#2A3040", color: "#8A91A8" }}
-  >
-    <Upload size={15} /> Importer un fichier GPX (Strava)
-  </button>
-  <input ref={fileInputRef} type="file" accept=".gpx" className="hidden" onChange={handleFileSelected} />
-  {importMsg && (
-    <div className="mt-2 text-xs font-mono px-1 text-center" style={{ color: importMsg.startsWith("Importé") ? "#3DDC97" : "#FF9B8A" }}>
-      {importMsg}
-    </div>
-  )}
-</div>
+          {/* Bouton profil / connexion */}
+          <div className="relative">
+            <button 
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="w-9 h-9 rounded-full bg-[#1B202C] border border-[#2A3040] flex items-center justify-center overflow-hidden active:scale-95 transition"
+            >
+              {user && user.photoURL ? (
+                <img src={user.photoURL} alt="Profil" className="w-full h-full object-cover" />
+              ) : (
+                <User size={18} color={user ? "#33F7FF" : "#5A6072"} />
+              )}
+            </button>
 
+            {/* Menu déroulant */}
+            {userMenuOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-[#131722] border border-[#1F2530] rounded-xl shadow-2xl py-2 z-30">
+                {user ? (
+                  <div>
+                    <div className="px-3 py-2 border-b border-[#1F2530]">
+                      <p className="text-xs font-medium text-[#EAEDF5] truncate">{user.displayName || "Athlète"}</p>
+                      <p className="text-[10px] text-[#5A6072] truncate">{user.email}</p>
+                    </div>
+                    <button 
+                      onClick={handleLogout} 
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#FF9B8A] hover:bg-[#1B202C] text-left"
+                    >
+                      <LogOut size={14} /> Déconnexion
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={handleGoogleLogin} 
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#33F7FF] hover:bg-[#1B202C] text-left font-medium"
+                  >
+                    <LogIn size={14} /> Connexion Google
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Bouton d'import GPX */}
+        <button
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border border-dashed transition-colors hover:border-[#33F7FF]/50"
+          style={{ borderColor: "#2A3040", color: "#8A91A8" }}
+        >
+          <Upload size={15} /> Importer un fichier GPX (Strava)
+        </button>
+        <input ref={fileInputRef} type="file" accept=".gpx" className="hidden" onChange={handleFileSelected} />
+        
+        {importMsg && (
+          <div className="mt-2 text-xs font-mono px-1 text-center" style={{ color: importMsg.startsWith("Importé") ? "#3DDC97" : "#FF9B8A" }}>
+            {importMsg}
+          </div>
+        )}
+      </div>
+
+      {/* Le reste de ton application (Vues, Modals, Navigation) continue en dessous... */}
       {!loaded ? (
         <div className="px-5 py-10 text-[#5A6072] font-mono text-sm">Chargement…</div>
       ) : (
