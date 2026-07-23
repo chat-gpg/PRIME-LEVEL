@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Rajdhani:wght@600;700&family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;500;600&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,7 +6,6 @@
 /* ==========================================================================
    1. POLICES & IMPORTS
    ========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Rajdhani:wght@600;700&family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;500;600&display=swap');
 
 /* ==========================================================================
    2. VARIABLES DESIGN SYSTEM (Dark Cyber / Neon Theme)
